@@ -48,6 +48,13 @@ log/*.log
 .DS_Store
 Thumbs.db
 
+# Word temp/lock files
+~$*.docx
+~$*.doc
+
+# Misc temp files
+20000
+
 # Project specific
 outputs/*
 !outputs/.gitkeep
