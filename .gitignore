@@ -42,6 +42,7 @@ credentials.json
 # Logs
 log/*.txt
 log/*.log
+log/old_logs/
 *.log
 
 # OS files
