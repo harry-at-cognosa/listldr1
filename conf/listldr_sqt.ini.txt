@@ -1,5 +1,5 @@
 [paths]
-PATH_ROOT = /Users/harry/1_listldr
+PATH_ROOT = /Users/harry/1_listldr_files
 TEMPLATE_INPUT_FOLDER = inputs/che
 LOGFILE_DIR_PATH = ./log
 
