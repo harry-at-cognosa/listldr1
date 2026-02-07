@@ -150,7 +150,8 @@ def discover_files(input_dir: Path, skip: int, process: int) -> list[Path]:
     Returns sorted list after applying skip/process limits.
     """
     files = sorted(
-        [f for f in input_dir.glob("*.docx")],
+        [f for f in input_dir.glob("*.docx")
+         if not f.name.startswith("~") and not f.stem.isdigit()],
         key=lambda p: p.name.lower()
     )
 
