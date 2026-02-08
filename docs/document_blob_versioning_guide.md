@@ -1,5 +1,15 @@
 # Document Blob Versioning Guide
 
+Answers the question:
+
+please create a markdown document that explains to a programer a) the way 
+  that documents associated with a row in the plsq_templates file is       
+  associated with a docx file stored in the document_blob table via it's    
+  current_blob_id which is an FK to the PK blob_id field in that table.     
+  explain also how the document blob history file is used to link to prior  
+  versions (if any) of that docx file in the document_blob_history file     
+  when a new version of the plsq_template record's document is updated. 
+
 How `plsq_templates` rows link to their `.docx` files and how prior document versions are tracked.
 
 ---
@@ -90,7 +100,7 @@ Each row records a **single replacement event**: "entity X used to point to blob
 ```
 plsq_templates                 document_blob
 +-----------------+            +-------------------+
-| plsqt_id  (PK) |            | blob_id  (PK)     |
+| plsqt_id  (PK)  |            | blob_id  (PK)     |
 | plsqt_name      |            | bytes             |
 | current_blob_id |---FK------>| sha256  (UNIQUE)  |
 | ...             |            | size_bytes        |

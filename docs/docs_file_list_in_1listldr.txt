@@ -1,0 +1,64 @@
+Jan 30 21:48 template_workflow_design.md
+Feb
+
+4 13:19 listmgr1_db_schema.sql
+Feb
+
+5 22:36 SQM_load_quote_template_docx_file_spec_v3.md
+Feb
+
+6 20:37 SQM_load_quote_template_docx_file_v2.0_spec.md
+Feb
+
+7 09:09 template_migration_request_summary.md
+Feb
+
+7 09:11 template _migration_analysis.md
+Feb
+
+7 10:11 ~Smplate_migration_analysis.docx
+Feb
+
+7 10:15 template_migration_analysis.docx
+
+
+Feb 7 10:15 template_migration_analysis
+
+
+Feb 7 10:30 ubm_section_comparison_1_4.md
+
+
+Feb 7 13:45 ubm_section_comparison_1_4.docx
+Feb
+
+7 13:45 ubm_section_comparison
+
+
+Feb 7 13:48 template_migration_request_summary.docx
+Feb
+
+7 13:48 template_migration_request_summary
+Feb
+
+7 13:51 ecm_section_comparison_1_4.md
+
+
+Feb 7 14:14 ubm_section_comparison_5_8.md
+
+
+Feb 7 14:16 ecm_section_comparison_5_8.md
+Feb
+
+7 15:13 ecm_section_comparison_5_8.docx
+Feb
+
+7 15:13 ubm_section_comparison_5_8.docx
+Feb
+
+7 20:37 ~$m_section_comparison_1_4.docx
+
+
+Feb 7 20:45 ~$m_section_comparison_5_8.docx
+
+
+Feb 7 20:50 ecm_section_comparison_1_4.docx
