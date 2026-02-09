@@ -14,9 +14,22 @@ LISTLDR_DB_PORT=5432
 LISTLDR_DB_USER=postgres
 LISTLDR_DB_PASSWORD=
 LISTLDR_DB_NAME=listmgr1
+LISTLDR_CORS_ORIGINS=http://localhost:3000
 ```
 
 These are read at server startup. If your database credentials differ from the defaults, edit `.env` before starting the server.
+
+### CORS
+
+The API includes CORS middleware so it can be called from a browser or a Node.js backend running on a different origin.
+
+- **Default allowed origin**: `http://localhost:3000`
+- Set `LISTLDR_CORS_ORIGINS` in `.env` to override. Multiple origins can be comma-separated:
+  ```
+  LISTLDR_CORS_ORIGINS=http://localhost:3000,https://app.example.com
+  ```
+- Only `POST` requests are allowed (the only method the API uses).
+- Changes to CORS origins require a server restart.
 
 ---
 
