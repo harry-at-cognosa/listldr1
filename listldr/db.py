@@ -13,34 +13,10 @@ from typing import Optional
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from listldr.text_utils import longest_common_substring
+
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-
-def _longest_common_substring(s1: str, s2: str) -> int:
-    """
-    Return the length of the longest common contiguous substring (case-insensitive).
-
-    Uses standard DP algorithm. E.g. "Option" vs "Options and Accessories" → 6.
-    """
-    s1 = s1.lower()
-    s2 = s2.lower()
-    m, n = len(s1), len(s2)
-    if m == 0 or n == 0:
-        return 0
-
-    # prev and curr rows of the DP table
-    prev = [0] * (n + 1)
-    best = 0
-    for i in range(1, m + 1):
-        curr = [0] * (n + 1)
-        for j in range(1, n + 1):
-            if s1[i - 1] == s2[j - 1]:
-                curr[j] = prev[j - 1] + 1
-                if curr[j] > best:
-                    best = curr[j]
-        prev = curr
-    return best
 
 
 @dataclass
@@ -56,12 +32,16 @@ class DBConfig:
 class SQMDatabase:
     """Database manager for SQM template loading."""
 
-    def __init__(self, config: DBConfig):
+    def __init__(self, config: DBConfig | None = None, conn=None):
         self.config = config
-        self.conn = None
+        self.conn = conn
 
     def connect(self) -> None:
         """Open database connection."""
+        if self.conn is not None:
+            return  # already have an injected connection
+        if self.config is None:
+            raise ValueError("No config or connection provided")
         self.conn = psycopg2.connect(
             host=self.config.host,
             port=self.config.port,
@@ -169,7 +149,7 @@ class SQMDatabase:
         best_len = 0
 
         for type_id, type_name in section_types:
-            lcs_len = _longest_common_substring(heading_text, type_name)
+            lcs_len = longest_common_substring(heading_text, type_name)
             if lcs_len > best_len:
                 best_len = lcs_len
                 best_id = type_id
@@ -177,26 +157,6 @@ class SQMDatabase:
         if best_len < min_match_length:
             return None
         return best_id
-
-    # DEPRECATED: used by v1 script only. Prefer lookup_section_type_by_lcs().
-    def lookup_section_type(self, heading_text: str) -> Optional[int]:
-        """
-        Look up section_type_id by 12-char prefix match (case-insensitive).
-        Returns the first matching plsqtst_id (ordered by id ASC), or None.
-        """
-        prefix = heading_text[:12].lower()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT plsqtst_id FROM plsqts_type
-                WHERE LOWER(LEFT(plsqtst_name, 12)) = %s
-                ORDER BY plsqtst_id ASC
-                LIMIT 1
-                """,
-                (prefix,)
-            )
-            row = cur.fetchone()
-            return row[0] if row else None
 
     # -------------------------------------------------------------------------
     # Blob Operations
@@ -296,6 +256,7 @@ class SQMDatabase:
         blob_id: int,
         section_count: int,
         file_path: str,
+        update_user: str = "SQM_loader",
     ) -> None:
         """Update an existing template row."""
         now = datetime.now()
@@ -314,7 +275,7 @@ class SQMDatabase:
                     plsqt_active = true,
                     plsqt_status = 'not started',
                     last_update_datetime = %s,
-                    last_update_user = 'SQM_loader',
+                    last_update_user = %s,
                     plsqt_enabled = 1
                 WHERE plsqt_id = %s
                 """,
@@ -328,6 +289,7 @@ class SQMDatabase:
                     date.today(),
                     file_path,
                     now,
+                    update_user,
                     plsqt_id,
                 )
             )
@@ -342,6 +304,7 @@ class SQMDatabase:
         blob_id: int,
         section_count: int,
         file_path: str,
+        update_user: str = "SQM_loader",
     ) -> int:
         """Insert a new template row. Returns plsqt_id."""
         now = datetime.now()
@@ -364,7 +327,7 @@ class SQMDatabase:
                     last_update_user,
                     plsqt_enabled
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, true, 'not started', %s, 'SQM_loader', 1
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, true, 'not started', %s, %s, 1
                 )
                 RETURNING plsqt_id
                 """,
@@ -379,6 +342,7 @@ class SQMDatabase:
                     date.today(),
                     file_path,
                     now,
+                    update_user,
                 )
             )
             return cur.fetchone()[0]
@@ -393,6 +357,7 @@ class SQMDatabase:
         section_type_id: int,
         seqn: int,
         content: str,
+        update_user: str = "SQM_loader",
     ) -> int:
         """Insert a section row. Returns plsqts_id."""
         now = datetime.now()
@@ -410,11 +375,11 @@ class SQMDatabase:
                     last_update_user,
                     plsqts_enabled
                 ) VALUES (
-                    %s, %s, %s, %s, true, 'not started', %s, 'SQM_loader', 1
+                    %s, %s, %s, %s, true, 'not started', %s, %s, 1
                 )
                 RETURNING plsqts_id
                 """,
-                (plsqt_id, section_type_id, seqn, content, now)
+                (plsqt_id, section_type_id, seqn, content, now, update_user)
             )
             return cur.fetchone()[0]
 

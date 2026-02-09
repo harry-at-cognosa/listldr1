@@ -1,4 +1,4 @@
-# sqm_docx_parser.py - v1.2 - 2026-02-06
+# parser.py - v1.2 - 2026-02-06
 # SQM DOCX Parser: extract section headings and content from Word documents
 # Handles paragraphs, table-based headings, trailing table headings, and TOC-driven validation
 
@@ -11,7 +11,7 @@ Handles both standalone paragraphs and text within table cells.
 
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, BinaryIO
 from pathlib import Path
 
 from docx import Document
@@ -115,9 +115,12 @@ def _extract_text_from_elements(elements: list) -> str:
     return '\n'.join(lines)
 
 
-def parse_docx_sections(file_path: str | Path) -> list[Section]:
+def parse_docx_sections(source: str | Path | BinaryIO) -> list[Section]:
     """
     Parse a docx file and extract all sections.
+
+    Args:
+        source: File path (str or Path) or file-like object (BinaryIO).
 
     Returns a list of Section objects:
     - Section 0 is always the cover page (content before first heading)
@@ -126,7 +129,7 @@ def parse_docx_sections(file_path: str | Path) -> list[Section]:
     Raises:
         ValueError: If document cannot be parsed
     """
-    doc = Document(file_path)
+    doc = Document(source)
     body = doc.element.body
     elements = list(body)
 
@@ -199,7 +202,7 @@ def extract_toc_entries(sections: list[Section]) -> list[tuple[int, str]]:
     """
     Extract table-of-contents entries from the cover page (section 0).
 
-    Scans cover page content for TOC entries like "3 – Machine Execution".
+    Scans cover page content for TOC entries like "3 - Machine Execution".
     Handles both newline-separated entries and entries concatenated on a
     single line (common in docx table cell extraction).
 
@@ -224,7 +227,7 @@ def extract_toc_entries(sections: list[Section]) -> list[tuple[int, str]]:
     return entries
 
 
-# DEPRECATED: hardcoded expected sequences — no longer used by validate_section_sequence().
+# DEPRECATED: hardcoded expected sequences -- no longer used by validate_section_sequence().
 # Kept for reference only. Validation now derives expected sections from the cover page TOC.
 EXPECTED_SEQUENCES = {
     'ECM': [0, 1, 2, 3, 4, 5, 6, 7, 8],  # 8 numbered + cover = 9 total
@@ -256,7 +259,7 @@ def validate_section_sequence(
     toc_entries = extract_toc_entries(sections)
 
     if not toc_entries:
-        # No TOC found on cover page — fall back to basic count check
+        # No TOC found on cover page -- fall back to basic count check
         if len(sections) < 6:
             return False, f"No TOC found and too few sections: {len(sections)} (need at least 6)"
         return True, ""

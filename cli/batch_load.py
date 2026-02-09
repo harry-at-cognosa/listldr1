@@ -1,48 +1,30 @@
 #!/usr/bin/env python3
-"""
-SQM Load Quote Template DOCX File
+# cli/batch_load.py - v2.1 - 2026-02-08
+# Batch load WAB sales-quote template files (.docx) into the listmgr1 database
+# Thin orchestrator that delegates core logic to listldr.service.load_template()
 
-Batch program to load WAB sales-quote template files (.docx) into the listmgr1 database.
+"""
+SQM Load Quote Template DOCX File - Batch CLI
 
 Usage:
-    python SQM_load_quote_template_docx_file.py [options]
+    python -m cli.batch_load [options]
+    python SQM_load_quote_template_docx_file_v2.0.py [options]
 
 See --help for available options.
 """
 
 import argparse
 import configparser
-import importlib.util
 import sys
 from datetime import datetime
 from pathlib import Path
 
-
-def _import_from_lib(module_name: str):
-    """Import a module from 1_listldr_lib (which has an invalid Python package name)."""
-    lib_dir = Path(__file__).parent / "1_listldr_lib"
-    module_path = lib_dir / f"{module_name}.py"
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
+from listldr.db import SQMDatabase, DBConfig
+from listldr.logger import SQMLogger
+from listldr.service import load_template
 
 
-# Import from 1_listldr_lib using importlib (package name starts with digit)
-sqm_logger = _import_from_lib("sqm_logger")
-sqm_db = _import_from_lib("sqm_db")
-sqm_docx_parser = _import_from_lib("sqm_docx_parser")
-
-SQMLogger = sqm_logger.SQMLogger
-SQMDatabase = sqm_db.SQMDatabase
-DBConfig = sqm_db.DBConfig
-parse_docx_sections = sqm_docx_parser.parse_docx_sections
-validate_section_sequence = sqm_docx_parser.validate_section_sequence
-Section = sqm_docx_parser.Section
-
-
-VERSION = "0.01"
+VERSION = "2.1"
 
 
 def parse_args() -> argparse.Namespace:
@@ -144,7 +126,8 @@ def discover_files(input_dir: Path, skip: int, process: int) -> list[Path]:
     Returns sorted list after applying skip/process limits.
     """
     files = sorted(
-        [f for f in input_dir.glob("*.docx")],
+        [f for f in input_dir.glob("*.docx")
+         if not f.name.startswith("~") and not f.stem.isdigit()],
         key=lambda p: p.name.lower()
     )
 
@@ -157,119 +140,6 @@ def discover_files(input_dir: Path, skip: int, process: int) -> list[Path]:
         files = files[:process]
 
     return files
-
-
-def process_file(
-    file_path: Path,
-    db: SQMDatabase,
-    country_id: int,
-    currency_id: int,
-    logger: SQMLogger,
-    noupdate: bool,
-) -> tuple[bool, int]:
-    """
-    Process a single template file.
-
-    Returns (success, section_count).
-    """
-    filename = file_path.name
-    stem = file_path.stem  # filename without extension
-
-    logger.log(f'Reading file "{file_path}"')
-    logger.progress('T')
-
-    # Parse product line from first 3 chars
-    if len(stem) < 3:
-        raise ValueError(f"Filename too short to extract product line: {stem}")
-
-    product_line_abbr = stem[:3]
-    pl_info = db.lookup_product_line(product_line_abbr)
-    if not pl_info:
-        raise ValueError(f"Unknown product line abbreviation: '{product_line_abbr}'")
-
-    product_line_id, product_cat_id = pl_info
-
-    # Parse sections from document
-    sections = parse_docx_sections(file_path)
-
-    # Log each section found
-    for sec in sections:
-        logger.log(f"  Section {sec.sequence}: {sec.heading}")
-        logger.progress('S')
-
-    # Validate section sequence
-    valid, error_msg = validate_section_sequence(sections, product_line_abbr)
-    if not valid:
-        raise ValueError(f"Section sequence validation failed: {error_msg}")
-
-    if noupdate:
-        logger.log("  NOUPDATE mode - skipping database writes")
-        return True, len(sections)
-
-    # Read file bytes for blob storage
-    file_bytes = file_path.read_bytes()
-
-    # Get or create blob
-    blob_id = db.get_or_create_blob(file_bytes, filename)
-    logger.log(f"  Blob ID: {blob_id}")
-
-    # Check if template already exists
-    existing = db.get_template_by_name(stem)
-
-    if existing:
-        plsqt_id = existing['plsqt_id']
-        old_blob_id = existing['current_blob_id']
-        logger.log(f"  Updating existing template ID: {plsqt_id}")
-
-        # Archive old blob if different
-        if old_blob_id and old_blob_id != blob_id:
-            db.archive_blob('template', plsqt_id, old_blob_id)
-            logger.log(f"  Archived old blob ID: {old_blob_id}")
-
-        # Delete old sections
-        deleted = db.delete_template_sections(plsqt_id)
-        logger.log(f"  Deleted {deleted} old sections")
-
-        # Update template
-        db.update_template(
-            plsqt_id=plsqt_id,
-            country_id=country_id,
-            currency_id=currency_id,
-            product_cat_id=product_cat_id,
-            product_line_id=product_line_id,
-            blob_id=blob_id,
-            section_count=len(sections),
-            file_path=str(file_path),
-        )
-    else:
-        # Insert new template
-        plsqt_id = db.insert_template(
-            plsqt_name=stem,
-            country_id=country_id,
-            currency_id=currency_id,
-            product_cat_id=product_cat_id,
-            product_line_id=product_line_id,
-            blob_id=blob_id,
-            section_count=len(sections),
-            file_path=str(file_path),
-        )
-        logger.log(f"  Created new template ID: {plsqt_id}")
-
-    # Insert sections
-    for sec in sections:
-        # Look up section type by heading (12-char prefix match)
-        section_type_id = db.lookup_section_type(sec.heading)
-        if section_type_id is None:
-            raise ValueError(f"No section type found for heading: '{sec.heading}'")
-
-        db.insert_section(
-            plsqt_id=plsqt_id,
-            section_type_id=section_type_id,
-            seqn=sec.sequence,
-            content=sec.content,
-        )
-
-    return True, len(sections)
 
 
 def main():
@@ -337,24 +207,48 @@ def main():
 
             logger.log(f"Resolved country_id={country_id}, currency_id={currency_id}")
 
+            # Pre-fetch section types for LCS matching (once, reused for all files)
+            section_types = db.fetch_all_section_types()
+            logger.log(f"Loaded {len(section_types)} section types for matching")
+
             # Process each file
             for idx, file_path in enumerate(files, 1):
                 try:
                     files_read += 1
-                    success, section_count = process_file(
-                        file_path=file_path,
+                    logger.log(f'Reading file "{file_path}"')
+                    logger.progress('T')
+
+                    file_bytes = file_path.read_bytes()
+                    result = load_template(
+                        file_bytes=file_bytes,
+                        filename=file_path.name,
                         db=db,
                         country_id=country_id,
                         currency_id=currency_id,
-                        logger=logger,
-                        noupdate=cfg['noupdate'],
+                        section_types=section_types,
+                        update_user="SQM_loader",
+                        dry_run=cfg['noupdate'],
+                        file_ref=str(file_path),
                     )
 
-                    if success:
-                        if not cfg['noupdate']:
-                            db.commit()
-                        files_stored += 1
-                        total_sections += section_count
+                    # Log sections
+                    for sec_info in result.sections:
+                        logger.log(f"  Section {sec_info.sequence}: {sec_info.heading}")
+                        logger.progress('S')
+
+                    if cfg['noupdate']:
+                        logger.log("  NOUPDATE mode - skipping database writes")
+                    elif result.is_new:
+                        logger.log(f"  Created new template ID: {result.plsqt_id}")
+                    else:
+                        logger.log(f"  Updated existing template ID: {result.plsqt_id}")
+
+                    logger.log(f"  Blob ID: {result.blob_id}")
+
+                    if not cfg['noupdate']:
+                        db.commit()
+                    files_stored += 1
+                    total_sections += result.section_count
 
                 except Exception as e:
                     files_failed += 1
