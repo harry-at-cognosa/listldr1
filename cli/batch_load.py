@@ -19,6 +19,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Ensure project root is on sys.path when run as a script (python cli/batch_load.py)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from listldr.db import SQMDatabase, DBConfig
 from listldr.logger import SQMLogger
 from listldr.service import load_template
