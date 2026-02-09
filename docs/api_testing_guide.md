@@ -172,6 +172,53 @@ Expected response:
 
 ---
 
+## Blob Archive/Cleanup Program
+
+Purges old `document_blob_history` rows and any orphaned `document_blob` data they pointed to. Run from the project root directory.
+
+```
+python cli/archive_blobs.py YYMMDD [options]
+```
+
+| Option          | Description                                          |
+|-----------------|------------------------------------------------------|
+| `YYMMDD`        | Cutoff date (e.g. `260101` = 2026-01-01). History entries older than this are removed. |
+| `--entity-type` | `template`, `quote`, or `both` (default: `both`)     |
+| `--ini`         | DB config file (default: `./conf/listldr_sqt.ini`)   |
+| `--dry-run`     | Show what would be deleted, no changes made           |
+
+### Examples
+
+```bash
+# Dry-run — see what would be purged before 2026-01-01
+python cli/archive_blobs.py 260101 --dry-run
+
+# Templates only
+python cli/archive_blobs.py 260101 --entity-type template --dry-run
+
+# Quotes only
+python cli/archive_blobs.py 260101 --entity-type quote
+
+# Real run (both templates and quotes)
+python cli/archive_blobs.py 260101
+```
+
+### Sample output
+
+```
+Blob Archive — cutoff 2026-01-01, entity_type: both
+History rows deleted: 12
+Orphaned blobs deleted: 8 (3.2 MB freed)
+
+Committed.
+```
+
+A blob is only deleted if it is not referenced by any live template, any live quote, or any remaining history row. Always run with `--dry-run` first.
+
+See [docs/blob_archive_design.md](blob_archive_design.md) for full design details.
+
+---
+
 ## Comparison with the Batch CLI
 
 | Feature                | Batch CLI                                        | API                                     |
