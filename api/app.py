@@ -7,8 +7,11 @@ Start with:
 
 from contextlib import asynccontextmanager
 
+import os
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from psycopg2.pool import ThreadedConnectionPool
 
 from listldr.config import db_config_from_env
@@ -53,5 +56,11 @@ app = FastAPI(
     title="SQM Template Loader API",
     version="1.0.0",
     lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("LISTLDR_CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_methods=["POST"],
+    allow_headers=["*"],
 )
 app.include_router(router)
