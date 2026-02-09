@@ -1,0 +1,11 @@
+Restructuring_the_SQM_loader_program_for_re-use_–_generate_a_design_and_plan_260208.docx
+
+Please review the current codebase with a focus on the cpaabilities in the data loading “SQM_load_quote_template_docx_file_v2.0.py”
+
+I would like to see a plan to re-structure this code base so that it can a) continue to run the “batch job” that loads sales quote template docx files into the plsq_template, plsqt_section and document_blob tables  but also b) can be called as a service by another back-end service (based on npm / node.js) to provide an “add this sales quote template file (handed off) to the plsq_template, plsqt_section and document_blob tables” in just the same way.
+In this scenario, the front end node.js app sends the file to the current node.js back end, which in turns make an internal HTTP call to the PythonAPI service this old program is refactored to support.  The old batch code is imported and called to use the same python parsing and database functions directly, without going through http. The old backend and the new front end service share the single library of core logic – the parsing, validation, section detection and database writes we have already built.
+The new service should probably be built with FastAPI for a number of reasons; no need to debate that. The necessary restructuring work will ensure that the core logic (parsing sections, resolving section types, writing to plsq_templates and plsqt_sections Iand writing to document_blob) will live in importable modules, separate from both the batch CLI entry point and the API entry point.  Our starting program is reasonably modular.
+
+Please think through the necessary refactoring job and give me your design approach and thoughts.  The existing javascrip backend will also be running, and so both backend service modules will have their own database connections. 
+
+I will wait for any questions you about this and your proposed approach, design and plan in a markdown file.
