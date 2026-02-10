@@ -8,14 +8,14 @@
 │   ├── db.py                   # SQMDatabase, DBConfig
 │   ├── logger.py               # SQMLogger
 │   ├── models.py               # TemplateLoadResult, SectionInfo
-│   ├── parser.py               # parse_docx_sections, validate, TOC
+│   ├── parser.py               # parse_docx_sections, extract_section_docx, TOC
 │   ├── service.py              # load_template() — shared core logic
 │   └── text_utils.py           # longest_common_substring
 ├── api/                        # FastAPI application
 │   ├── __init__.py
 │   ├── app.py                  # app, lifespan, CORS, pool
 │   ├── dependencies.py         # get_db, get_section_types
-│   ├── routes.py               # POST /api/v1/templates/load
+│   ├── routes.py               # POST /load, GET /sections/{seqn}/docx
 │   └── schemas.py              # Pydantic response models
 ├── cli/                        # batch entry points
 │   ├── __init__.py
@@ -52,4 +52,5 @@
 ## Key Documentation
 
 - [API Testing Guide](api_testing_guide.md) — server setup, curl examples, CORS config
+- [Section Extract Service](section_extract_service.md) — GET endpoint for extracting formatted sections
 - [Blob Archive Design](blob_archive_design.md) — how blob storage and cleanup work
