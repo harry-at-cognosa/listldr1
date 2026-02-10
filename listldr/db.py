@@ -218,9 +218,57 @@ class SQMDatabase:
                 (entity_type, entity_id, blob_id, replaced_by)
             )
 
+    def get_blob_bytes(self, blob_id: int) -> Optional[bytes]:
+        """Fetch the raw file bytes from document_blob. Returns None if not found."""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT bytes FROM document_blob WHERE blob_id = %s",
+                (blob_id,)
+            )
+            row = cur.fetchone()
+            return bytes(row[0]) if row else None
+
     # -------------------------------------------------------------------------
     # Template Operations
     # -------------------------------------------------------------------------
+
+    def get_template_by_id(self, plsqt_id: int) -> Optional[dict]:
+        """
+        Get template by ID.
+        Returns dict with plsqt_id, plsqt_name, current_blob_id, plsqt_section_count, or None.
+        """
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT plsqt_id, plsqt_name, current_blob_id, plsqt_section_count
+                FROM plsq_templates
+                WHERE plsqt_id = %s
+                """,
+                (plsqt_id,)
+            )
+            return cur.fetchone()
+
+    def get_section_info(self, plsqt_id: int, seqn: int) -> list[dict]:
+        """
+        Get section record(s) for a template at a given sequence number,
+        joined to plsqts_type for the type name.
+
+        Returns list of dicts with: plsqts_id, plsqts_seqn, section_type_id,
+        plsqtst_name, plsqts_use_alt_name, plsqts_alt_name.
+        """
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT s.plsqts_id, s.plsqts_seqn, s.section_type_id,
+                       t.plsqtst_name, s.plsqts_use_alt_name, s.plsqts_alt_name
+                FROM plsqt_sections s
+                JOIN plsqts_type t ON s.section_type_id = t.plsqtst_id
+                WHERE s.plsqt_id = %s AND s.plsqts_seqn = %s
+                ORDER BY s.plsqts_id
+                """,
+                (plsqt_id, seqn)
+            )
+            return cur.fetchall()
 
     def get_template_by_name(self, plsqt_name: str) -> Optional[dict]:
         """

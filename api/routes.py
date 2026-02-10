@@ -3,11 +3,15 @@ API routes for the SQM template loader.
 """
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException
+from fastapi.responses import Response
 
 from listldr.db import SQMDatabase
+from listldr.parser import extract_section_docx
 from listldr.service import load_template
 from api.dependencies import get_db, get_section_types
 from api.schemas import LoadSuccessResponse, TemplateResponse, SectionResponse
+
+DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 router = APIRouter(prefix="/api/v1/templates", tags=["templates"])
 
@@ -73,4 +77,63 @@ async def load_template_endpoint(
                 for s in result.sections
             ],
         )
+    )
+
+
+@router.get("/{plsqt_id}/sections/{seqn}/docx")
+def get_section_docx(
+    plsqt_id: int,
+    seqn: int,
+    db: SQMDatabase = Depends(get_db),
+):
+    """
+    Extract a single section from a template's .docx file and return it
+    as a fully formatted .docx document (clone-and-strip).
+    """
+    # 1. Look up template
+    template = db.get_template_by_id(plsqt_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail=f"Template not found: {plsqt_id}")
+
+    blob_id = template["current_blob_id"]
+    if blob_id is None:
+        raise HTTPException(status_code=404, detail=f"No document stored for template {plsqt_id}")
+
+    # 2. Look up section record(s) for this seqn
+    section_rows = db.get_section_info(plsqt_id, seqn)
+    if not section_rows:
+        raise HTTPException(status_code=404, detail=f"No section {seqn} for template {plsqt_id}")
+
+    # 3. Resolve section name (use alt_name if flagged)
+    row = section_rows[0]
+    if row["plsqts_use_alt_name"] and row["plsqts_alt_name"]:
+        section_name = row["plsqts_alt_name"]
+    else:
+        section_name = row["plsqtst_name"]
+
+    # 4. Fetch blob bytes
+    source_bytes = db.get_blob_bytes(blob_id)
+    if source_bytes is None:
+        raise HTTPException(status_code=404, detail=f"Blob {blob_id} not found in document_blob")
+
+    # 5. Extract section from docx
+    docx_bytes = extract_section_docx(source_bytes, seqn)
+    if docx_bytes is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Section {seqn} not found in parsed document for template {plsqt_id}",
+        )
+
+    # 6. Build filename
+    safe_name = section_name.replace(" ", "_")
+    filename = f"plsqts_content_{plsqt_id}_{blob_id}_{seqn}_{safe_name}.docx"
+
+    return Response(
+        content=docx_bytes,
+        media_type=DOCX_CONTENT_TYPE,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Section-Count": str(template["plsqt_section_count"]),
+            "X-Content-Length": str(len(docx_bytes)),
+        },
     )

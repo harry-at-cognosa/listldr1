@@ -11,6 +11,7 @@ Handles both standalone paragraphs and text within table cells.
 
 import re
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Optional, BinaryIO
 from pathlib import Path
 
@@ -225,6 +226,85 @@ def extract_toc_entries(sections: list[Section]) -> list[tuple[int, str]]:
             entries.append((int(match.group(1)), match.group(2).strip()))
 
     return entries
+
+
+def _map_elements_to_sections(body) -> dict[int, list]:
+    """
+    Walk body elements and build a map of section sequence -> list of XML elements.
+
+    Uses the same heading detection and trailing-heading logic as parse_docx_sections().
+    """
+    elements = list(body)
+    section_elements: dict[int, list] = {}
+    current_elements: list = []
+    current_seq = 0
+    found_first_heading = False
+
+    for elem in elements:
+        heading_match = _find_heading_in_element(elem)
+
+        if heading_match:
+            section_num, _heading_title, is_trailing = heading_match
+
+            if is_trailing:
+                current_elements.append(elem)
+
+            if not found_first_heading:
+                if current_elements:
+                    section_elements[0] = list(current_elements)
+                found_first_heading = True
+            else:
+                section_elements[current_seq] = list(current_elements)
+
+            current_seq = section_num
+            current_elements = [] if is_trailing else [elem]
+        else:
+            current_elements.append(elem)
+
+    # Last section
+    if found_first_heading and current_elements:
+        section_elements[current_seq] = list(current_elements)
+    elif not found_first_heading and current_elements:
+        section_elements[0] = list(current_elements)
+
+    return section_elements
+
+
+def extract_section_docx(source_bytes: bytes, target_seqn: int) -> bytes | None:
+    """
+    Clone a .docx and strip all body content except the target section.
+
+    Uses the clone-and-strip approach: opens the full document (preserving
+    headers, footers, page layout, styles, fonts, images), then removes
+    every body element that does not belong to the requested section.
+
+    Args:
+        source_bytes: Raw bytes of the source .docx file.
+        target_seqn: Section sequence number to keep (0 = cover page).
+
+    Returns:
+        Bytes of the new .docx containing only the target section,
+        or None if the target section was not found in the document.
+    """
+    doc = Document(BytesIO(source_bytes))
+    body = doc.element.body
+
+    section_elements = _map_elements_to_sections(body)
+
+    if target_seqn not in section_elements:
+        return None
+
+    # Build set of element ids to keep
+    keep = {id(e) for e in section_elements[target_seqn]}
+
+    # Remove all body elements not in the target section
+    for elem in list(body):
+        if id(elem) not in keep:
+            body.remove(elem)
+
+    output = BytesIO()
+    doc.save(output)
+    return output.getvalue()
 
 
 # DEPRECATED: hardcoded expected sequences -- no longer used by validate_section_sequence().

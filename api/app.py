@@ -60,7 +60,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("LISTLDR_CORS_ORIGINS", "http://localhost:3000").split(","),
-    allow_methods=["POST"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 app.include_router(router)
