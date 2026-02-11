@@ -143,7 +143,7 @@ Upload a `.docx` template file for parsing and storage.
 
 - **Content-Type:** `multipart/form-data`
 - **Form fields:** `file` (the .docx), `country`, `currency`, `product_line` (optional), `dry_run` (optional, default false)
-- **Returns:** JSON with template ID, name, sections, blob ID
+- **Returns:** JSON with template ID, name, sections, blob ID (see Success Response and Error Conditions below)
 
 **Testing via Swagger UI (easiest for file uploads):**
 
@@ -178,6 +178,56 @@ curl -X POST http://127.0.0.1:8000/api/v1/templates/load \
   -F "currency=CHF" \
   -F "dry_run=false"
 ```
+
+#### Success Response (HTTP 200)
+
+```json
+{
+  "status": "success",
+  "template": {
+    "plsqt_id": 40,
+    "template_name": "ECM AP 10 CHE",
+    "product_line": "ECM",
+    "is_new": true,
+    "section_count": 8,
+    "blob_id": 123,
+    "sections": [
+      {
+        "sequence": 1,
+        "heading": "Introduction",
+        "section_type_id": 3
+      },
+      {
+        "sequence": 2,
+        "heading": "Scope of Work",
+        "section_type_id": 5
+      }
+    ]
+  }
+}
+```
+
+Key fields:
+- **`plsqt_id`** — the template's database ID (0 if dry_run)
+- **`is_new`** — `true` if created, `false` if it updated an existing template
+- **`blob_id`** — the stored document blob ID (0 if dry_run)
+- **`sections`** — every section found in the document, with its sequence, heading text, and matched section type ID
+
+#### Error Conditions
+
+All errors prevent the template from being saved. Any partial DB writes are rolled back.
+
+| HTTP Status | Condition | Detail message |
+|---|---|---|
+| 400 | File missing or not `.docx` | "File must be a .docx document" |
+| 400 | Country abbreviation not found or not enabled | "Country not found: {country}" |
+| 400 | Currency symbol not found or not enabled | "Currency not found: {currency}" |
+| 400 | Filename too short to determine product line (and no override provided) | "Filename too short to extract product line: {stem}" |
+| 400 | Product line abbreviation not in database | "Unknown product line abbreviation: '{abbr}'" |
+| 400 | Parsed sections don't match expected structure | "Section sequence validation failed: {details}" |
+| 400 | A section heading can't be matched to any known section type | "No section type found for heading: '{heading}'" |
+| 422 | Required form fields missing (`file`, `country`, `currency`) | FastAPI validation error (automatic) |
+| 500 | Database connection failure, corrupt `.docx`, or other unhandled error | Internal server error |
 
 ### GET `/api/v1/templates/{plsqt_id}/sections/{seqn}/docx`
 
