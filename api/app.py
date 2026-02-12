@@ -16,6 +16,7 @@ from psycopg2.pool import ThreadedConnectionPool
 
 from listldr.config import db_config_from_env
 from listldr.db import SQMDatabase
+from listldr.logger import SQMLogger
 from api.routes import router
 
 load_dotenv()
@@ -46,9 +47,20 @@ async def lifespan(app: FastAPI):
     finally:
         pool.putconn(conn)
 
+    # Start request logger
+    origins = os.environ.get("LISTLDR_CORS_ORIGINS", "http://localhost:3000")
+    logger = SQMLogger(log_dir="./log", slug="API_services", version="01", silent=False)
+    app.state.logger = logger
+    logger.log("=== SQM Template Loader API v1.0.0 starting ===")
+    logger.log(f"DB host: {cfg.host}:{cfg.port}/{cfg.database}")
+    logger.log(f"CORS origins: {origins}")
+    logger.log(f"Section types cached: {len(app.state.section_types)}")
+
     yield
 
-    # Shutdown: close all pooled connections
+    # Shutdown: log uptime, close logger, close pool
+    logger.log(f"=== Shutting down (uptime {logger.elapsed_seconds:.1f}s) ===")
+    logger.close()
     pool.closeall()
 
 

@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException
 from fastapi.responses import Response
 
 from listldr.db import SQMDatabase
+from listldr.logger import SQMLogger
 from listldr.parser import extract_section_docx
 from listldr.service import load_template
-from api.dependencies import get_db, get_section_types
+from api.dependencies import get_db, get_logger, get_section_types
 from api.schemas import LoadSuccessResponse, TemplateResponse, SectionResponse
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -25,22 +26,31 @@ async def load_template_endpoint(
     dry_run: bool = Form(False),
     db: SQMDatabase = Depends(get_db),
     section_types: list[tuple[int, str]] = Depends(get_section_types),
+    logger: SQMLogger = Depends(get_logger),
 ):
     """
     Upload and load a .docx sales-quote template into the database.
     """
+    logger.log(f"POST /load file={file.filename} country={country} currency={currency} dry_run={dry_run}")
+
     # Validate file extension
     if not file.filename or not file.filename.lower().endswith(".docx"):
-        raise HTTPException(status_code=400, detail="File must be a .docx document")
+        detail = "File must be a .docx document"
+        logger.log(f"  ERROR 400: {detail}")
+        raise HTTPException(status_code=400, detail=detail)
 
     # Resolve country and currency
     country_id = db.lookup_country(country)
     if country_id is None:
-        raise HTTPException(status_code=400, detail=f"Country not found: {country}")
+        detail = f"Country not found: {country}"
+        logger.log(f"  ERROR 400: {detail}")
+        raise HTTPException(status_code=400, detail=detail)
 
     currency_id = db.lookup_currency(currency)
     if currency_id is None:
-        raise HTTPException(status_code=400, detail=f"Currency not found: {currency}")
+        detail = f"Currency not found: {currency}"
+        logger.log(f"  ERROR 400: {detail}")
+        raise HTTPException(status_code=400, detail=detail)
 
     # Read file bytes
     file_bytes = await file.read()
@@ -58,7 +68,13 @@ async def load_template_endpoint(
             dry_run=dry_run,
         )
     except ValueError as e:
+        logger.log(f"  ERROR 400 (ValueError): {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+    logger.log(
+        f"  OK: template={result.template_name} plsqt_id={result.plsqt_id}"
+        f" blob_id={result.blob_id} sections={result.section_count} is_new={result.is_new}"
+    )
 
     return LoadSuccessResponse(
         template=TemplateResponse(
@@ -85,24 +101,33 @@ def get_section_docx(
     plsqt_id: int,
     seqn: int,
     db: SQMDatabase = Depends(get_db),
+    logger: SQMLogger = Depends(get_logger),
 ):
     """
     Extract a single section from a template's .docx file and return it
     as a fully formatted .docx document (clone-and-strip).
     """
+    logger.log(f"GET /{plsqt_id}/sections/{seqn}/docx")
+
     # 1. Look up template
     template = db.get_template_by_id(plsqt_id)
     if template is None:
-        raise HTTPException(status_code=404, detail=f"Template not found: {plsqt_id}")
+        detail = f"Template not found: {plsqt_id}"
+        logger.log(f"  ERROR 404: {detail}")
+        raise HTTPException(status_code=404, detail=detail)
 
     blob_id = template["current_blob_id"]
     if blob_id is None:
-        raise HTTPException(status_code=404, detail=f"No document stored for template {plsqt_id}")
+        detail = f"No document stored for template {plsqt_id}"
+        logger.log(f"  ERROR 404: {detail}")
+        raise HTTPException(status_code=404, detail=detail)
 
     # 2. Look up section record(s) for this seqn
     section_rows = db.get_section_info(plsqt_id, seqn)
     if not section_rows:
-        raise HTTPException(status_code=404, detail=f"No section {seqn} for template {plsqt_id}")
+        detail = f"No section {seqn} for template {plsqt_id}"
+        logger.log(f"  ERROR 404: {detail}")
+        raise HTTPException(status_code=404, detail=detail)
 
     # 3. Resolve section name (use alt_name if flagged)
     row = section_rows[0]
@@ -114,19 +139,25 @@ def get_section_docx(
     # 4. Fetch blob bytes
     source_bytes = db.get_blob_bytes(blob_id)
     if source_bytes is None:
-        raise HTTPException(status_code=404, detail=f"Blob {blob_id} not found in document_blob")
+        detail = f"Blob {blob_id} not found in document_blob"
+        logger.log(f"  ERROR 404: {detail}")
+        raise HTTPException(status_code=404, detail=detail)
 
     # 5. Extract section from docx
     docx_bytes = extract_section_docx(source_bytes, seqn)
     if docx_bytes is None:
+        detail = f"Section {seqn} not found in parsed document for template {plsqt_id}"
+        logger.log(f"  ERROR 404: {detail}")
         raise HTTPException(
             status_code=404,
-            detail=f"Section {seqn} not found in parsed document for template {plsqt_id}",
+            detail=detail,
         )
 
     # 6. Build filename
     safe_name = section_name.replace(" ", "_")
     filename = f"plsqts_content_{plsqt_id}_{blob_id}_{seqn}_{safe_name}.docx"
+
+    logger.log(f"  OK: {filename} ({len(docx_bytes)} bytes)")
 
     return Response(
         content=docx_bytes,

@@ -1,5 +1,5 @@
 """
-FastAPI dependency injection for DB connections and cached data.
+FastAPI dependency injection for DB connections, cached data, and logging.
 """
 
 from typing import Generator
@@ -7,6 +7,7 @@ from typing import Generator
 from fastapi import Depends, Request
 
 from listldr.db import SQMDatabase
+from listldr.logger import SQMLogger
 
 
 def get_db(request: Request) -> Generator[SQMDatabase, None, None]:
@@ -32,3 +33,8 @@ def get_db(request: Request) -> Generator[SQMDatabase, None, None]:
 def get_section_types(request: Request) -> list[tuple[int, str]]:
     """Return the cached section_types list from app state."""
     return request.app.state.section_types
+
+
+def get_logger(request: Request) -> SQMLogger:
+    """Return the shared SQMLogger instance from app state."""
+    return request.app.state.logger
